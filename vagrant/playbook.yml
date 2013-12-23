@@ -1,0 +1,54 @@
+---
+- hosts: all
+  vars:
+    res_dir: res/
+    redis_server_path: /usr/bin/redis-server
+    redis_cli_path: /usr/bin/redis-cli
+  tasks:
+    - name: Download latest Redis tarball.
+      get_url:
+        dest=/tmp/redis-2.8.3.tar.gz
+        "url=http://download.redis.io/releases/redis-2.8.3.tar.gz"
+        owner=root
+        group=root
+        mode=644
+      register: redis_download
+
+    - name: Unpack Redis tarball.
+      command: tar -xzf /tmp/redis-2.8.3.tar.gz
+        chdir=/tmp/
+      when: redis_download.changed
+
+    - name: Making Redis.
+      command: make
+        chdir=/tmp/redis-2.8.3
+      when: redis_download.changed
+      notify: Restart Redis
+
+    - name: Installing Redis
+      shell: PREFIX=/usr/ make install
+        chdir=/tmp/redis-2.8.3
+      when: redis_download.changed
+      notify: Restart Redis
+
+    - name: Installing Redis init scripts.
+      template:
+        dest=/etc/init.d/redis
+        src={{ res_dir }}/initscripts/redis.j2
+        owner=root
+        group=root
+        mode=755
+      notify: Restart Redis
+
+    - name: Configure Redis
+      template:
+        dest=/etc/redis.conf
+        src={{ res_dir }}/configfiles/redis.conf.minimal.j2
+        owner=root
+        group=root
+        mode=644
+      notify: Restart Redis
+
+  handlers:
+    - name: Restart Redis
+      service: name=redis state=restarted
